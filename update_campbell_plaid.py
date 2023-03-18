@@ -54,6 +54,7 @@ import psycopg2
 from sqlalchemy import create_engine
 from sqlalchemy import text
 from sqlalchemy import types
+import requests
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -66,6 +67,7 @@ PLAID_PRODUCTS = os.getenv('PLAID_PRODUCTS', 'transactions').split(',')
 PLAID_COUNTRY_CODES = os.getenv('PLAID_COUNTRY_CODES', 'US').split(',')
 ACCESS_TOKEN = os.getenv('ACCESS_TOKEN')
 PG_PASSWORD = os.getenv('PG_PASSWORD')
+SLACK_WEBHOOK_URL = os.getenv('SLACK_WEBHOOK_URL')
 CLIENT_NAME = "CampbellTechInc"
 
 TODAY = date.today()
@@ -86,16 +88,34 @@ def pg_conn():
         conn = db_engine.connect()
     except (Exception, psycopg2.DatabaseError) as error:
         print(error)
+        send_slack_message('Oh No something went wrong!',str(error))
+        exit()
 
     return conn
 
 def get_last_run(conn):
     sql = "SELECT MAX(date) FROM campbell_bank.public.plaid_raw"
 
-    result = conn.execute(text(sql))
-    last_run_date = result.first()[0]
-
+    try:
+        result = conn.execute(text(sql))
+        last_run_date = result.first()[0]
+    except Exception as error:
+        send_slack_message('Oh No something went wrong!', str(error))
+        exit()
     return last_run_date
+
+
+def get_current_balance(conn):
+    sql = "select balance from campbell_bank.public.checking_account_core where transaction_date = " \
+          "(select MAX(transaction_date) from campbell_bank.public.checking_account_core)"
+
+    try:
+        result = conn.execute(text(sql))
+        curr_balance = result.first()[0]
+    except Exception as error:
+        send_slack_message('Oh No something went wrong!', str(error))
+        exit()
+    return curr_balance
 
 def pull_campbell_plaid(last_date=None):
     if last_date == None:
@@ -170,6 +190,7 @@ def pg_load_plaid(transactions, conn):
     conn.commit()
     # conn.close()
     print('ingested %s rows' % num_rows)
+    return num_rows
 
 
 def combine_tables(conn):
@@ -258,25 +279,107 @@ def combine_tables(conn):
                     order by transaction_date desc
                     )
                     """
-
-    conn.execute(text(create_sql))
-    print('Combined')
+    try:
+        conn.execute(text(create_sql))
+        print('Combined')
+    except:
+        return 'Oh no the table join of plaid and UWCU failed'
     conn.commit()
+    return "Successfully combined UWCU and plaid"
 
+
+def send_slack_message(header, text_1=' ', text_2=' ', text_3=' '):
+    slack_blob = {
+        "username": 'Update Bot',
+        "channel": "#campbell-bank-testing",
+        "text": "Plaid data has been pulled and tables updated",
+        "icon_emoji": ":bank:",
+        "blocks": [
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": header
+                }
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "plain_text",
+                    "text": text_1
+                }
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "plain_text",
+                    "text": text_2
+                }
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "plain_text",
+                    "text": text_3
+                }
+            },
+            {
+                "type": "divider"
+            }
+        ]
+    }
+
+    i = 0
+    while i < 5:
+        response = requests.post(SLACK_WEBHOOK_URL, data=json.dumps(slack_blob))
+        if response.status_code == 200:
+            return
+        elif response.status_code != 200 and i < 4:
+            i += 1
+            time.sleep(30)
+            print('waiting')
+        elif i == 4:
+            raise Exception(response.status_code, response.text)
 
 if __name__ == '__main__':
-    conn = pg_conn()
-    last_run_date = get_last_run(conn)
-    if last_run_date == YESTERDAY:
-        print('Data already pulled up to yesterday, no new data to pull exiting...')
-        exit()
-    else:
-        transactions = pull_campbell_plaid(last_run_date)
-        pg_load_plaid(transactions, conn)
+    error_message = 'Oh no there was an error updating campble plaid'
+    header = 'Successful Campbell Plaid Pull'
+    try:
+        conn = pg_conn()
+        last_run_date = get_last_run(conn)
+        if last_run_date == YESTERDAY:
+            print('Data already pulled up to yesterday, no new data to pull exiting...')
+            exit()
+        else:
+            try:
+                transactions = pull_campbell_plaid(last_run_date)
+                load_result = pg_load_plaid(transactions, conn)
+                if int(load_result) == 0:
+                    plaid_message = 'No new data available from campbell-plaid'
+                    comb_message = 'No merge needed'
+                    balance = '{:,}'.format(get_current_balance(conn))
+                    balance_message = f'Current Balance: :heavy_dollar_sign:{balance}'
+                    send_slack_message(header, plaid_message, comb_message,balance_message)
+                    exit()
 
-        combine_tables(conn)
-        conn.close()
-        print('done')
+                else:
+                    plaid_message = f':tada: Data was pulled from campbell-plaid and {load_result} ' \
+                                    f'rows were added to the plaid table'
+
+            except Exception as error:
+                send_slack_message(error_message, str(error))
+                exit()
+
+            comb_message = combine_tables(conn)
+            balance = '{:,}'.format(get_current_balance(conn))
+            balance_message = f'Current Balance: :heavy_dollar_sign:{balance}'
+            send_slack_message(header, plaid_message, comb_message,balance_message)
+            conn.close()
+            print('done')
+    except Exception as e:
+        send_slack_message(error_message,str(e))
+        exit()
+
 
 
 
