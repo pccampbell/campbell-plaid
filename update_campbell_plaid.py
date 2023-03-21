@@ -291,7 +291,7 @@ def combine_tables(conn):
 def send_slack_message(header, text_1=' ', text_2=' ', text_3=' '):
     slack_blob = {
         "username": 'Update Bot',
-        "channel": "#campbell-bank-testing",
+        "channel": "#campbell-bank",
         "text": "Plaid data has been pulled and tables updated",
         "icon_emoji": ":bank:",
         "blocks": [
