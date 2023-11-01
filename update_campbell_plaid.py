@@ -34,6 +34,7 @@ from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchan
 from plaid.model.link_token_create_request import LinkTokenCreateRequest
 from plaid.model.transactions_sync_request import TransactionsSyncRequest
 from plaid.model.transactions_get_request import TransactionsGetRequest
+from plaid.model.transactions_refresh_request import TransactionsRefreshRequest
 from plaid.model.transactions_get_request_options import TransactionsGetRequestOptions
 from plaid.model.investments_transactions_get_request_options import InvestmentsTransactionsGetRequestOptions
 from plaid.model.investments_transactions_get_request import InvestmentsTransactionsGetRequest
@@ -121,6 +122,7 @@ def pull_campbell_plaid(last_date=None):
     if last_date == None:
         start_date = date.fromisoformat('2017-01-01')
     else:
+        # start_date = date.fromisoformat('2023-10-13')
         start_date = last_date + timedelta(days=1)
 
     PLAID_REDIRECT_URI = empty_to_none('PLAID_REDIRECT_URI')
@@ -180,10 +182,17 @@ def pg_load_plaid(transactions, conn):
     pretty_json = json.dumps(dict_list, indent=4, sort_keys=True, default=str)
     # json_string = json.dumps(transactions, indent=4, sort_keys=True, default=str)
     df = pd.read_json(pretty_json)
-    # datats = df.dtypes
-    # df.to_csv('test_ETL.csv', index=False)
+
+    #TODO This list of columns matches the db table....would want to asses how to better learn about changes to the raw data from transactions
+    established_columns = ['account_id', 'account_owner', 'amount', 'authorized_date', 'authorized_datetime',
+                           'category', 'category_id', 'check_number', 'date', 'datetime', 'iso_currency_code',
+                           'location', 'merchant_name', 'name', 'payment_channel', 'payment_meta', 'pending',
+                           'pending_transaction_id', 'personal_finance_category', 'transaction_code',
+                           'transaction_id', 'transaction_type', 'unofficial_currency_code']
+
+    established_df = df[established_columns]
     #### LOAD df into table(s)
-    num_rows = df.to_sql('plaid_raw', con=conn, index=False, if_exists='append',
+    num_rows = established_df.to_sql('plaid_raw', con=conn, index=False, if_exists='append',
                          dtype={'location': types.JSON,
                                 'payment_meta': types.JSON,
                                 'personal_finance_category': types.JSON})
@@ -248,7 +257,7 @@ def combine_tables(conn):
                     , transaction_type 
                     from 
                     campbell_bank.public.plaid_raw
-                    where account_id = 'bNPrxrEOYdCOJn4akbZwhKak700gMDuDw64V7' 
+                    where account_id in ('bNPrxrEOYdCOJn4akbZwhKak700gMDuDw64V7', 'Kb59M7gmmwiQOJKLV8waIDvJYw3v6aFEMvmO7') 
                     )
                     , combined as 
                     (
@@ -353,16 +362,16 @@ if __name__ == '__main__':
         else:
             try:
                 transactions = pull_campbell_plaid(last_run_date)
-                load_result = pg_load_plaid(transactions, conn)
-                if int(load_result) == 0:
+
+                if len(transactions) == 0:
                     plaid_message = 'No new data available from campbell-plaid'
                     comb_message = 'No merge needed'
                     balance = '{:,}'.format(get_current_balance(conn))
                     balance_message = f'Current Balance: :heavy_dollar_sign:{balance}'
-                    send_slack_message(header, plaid_message, comb_message,balance_message)
+                    send_slack_message(header, plaid_message, comb_message, balance_message)
                     exit()
-
                 else:
+                    load_result = pg_load_plaid(transactions, conn)
                     plaid_message = f':tada: Data was pulled from campbell-plaid and {load_result} ' \
                                     f'rows were added to the plaid table'
 
