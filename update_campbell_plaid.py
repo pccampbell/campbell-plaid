@@ -257,7 +257,7 @@ def combine_tables(conn):
                     , transaction_type 
                     from 
                     campbell_bank.public.plaid_raw
-                    where account_id in ('bNPrxrEOYdCOJn4akbZwhKak700gMDuDw64V7', 'Kb59M7gmmwiQOJKLV8waIDvJYw3v6aFEMvmO7') 
+                    where account_id in ('bNPrxrEOYdCOJn4akbZwhKak700gMDuDw64V7', 'Kb59M7gmmwiQOJKLV8waIDvJYw3v6aFEMvmO7','9MNJVaP4oyibOzyMx48XuzyYKa9wzofgBZ7rd', 'YdKONndeBVf18Jxjpe5ECO8evjJzwnCzKb9Zr') 
                     )
                     , combined as 
                     (
@@ -291,7 +291,9 @@ def combine_tables(conn):
     try:
         conn.execute(text(create_sql))
         print('Combined')
-    except:
+    except Exception as e:
+        print("Combining tables failed")
+        print(str(e))
         return 'Oh no the table join of plaid and UWCU failed'
     conn.commit()
     return "Successfully combined UWCU and plaid"
@@ -356,7 +358,7 @@ if __name__ == '__main__':
     try:
         conn = pg_conn()
         last_run_date = get_last_run(conn)
-        if last_run_date == YESTERDAY:
+        if last_run_date == None:
             print('Data already pulled up to yesterday, no new data to pull exiting...')
             exit()
         else:
