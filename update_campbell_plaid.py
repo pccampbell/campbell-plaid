@@ -63,7 +63,7 @@ load_dotenv()
 # Fill in your Plaid API keys - https://dashboard.plaid.com/account/keys
 PLAID_CLIENT_ID = os.getenv('PLAID_CLIENT_ID')
 PLAID_SECRET = os.getenv('PLAID_SECRET')
-PLAID_ENV = os.getenv('PLAID_ENV', 'development')
+PLAID_ENV = os.getenv('PLAID_ENV', 'production')
 PLAID_PRODUCTS = os.getenv('PLAID_PRODUCTS', 'transactions').split(',')
 PLAID_COUNTRY_CODES = os.getenv('PLAID_COUNTRY_CODES', 'US').split(',')
 ACCESS_TOKEN = os.getenv('ACCESS_TOKEN')
@@ -122,12 +122,14 @@ def pull_campbell_plaid(last_date=None):
     if last_date == None:
         start_date = date.fromisoformat('2017-01-01')
     else:
-        # start_date = date.fromisoformat('2023-10-13')
+        # start_date = date.fromisoformat('2024-01-28')
         start_date = last_date + timedelta(days=1)
 
     PLAID_REDIRECT_URI = empty_to_none('PLAID_REDIRECT_URI')
-    if PLAID_ENV == 'development':
-        host = plaid.Environment.Development
+    if PLAID_ENV == 'sandbox':
+        host = plaid.Environment.Sandbox
+    elif PLAID_ENV == 'production':
+        host = plaid.Environment.Production
 
     configuration = plaid.Configuration(
         host=host,
@@ -151,11 +153,13 @@ def pull_campbell_plaid(last_date=None):
         end_date=YESTERDAY, # date.fromisoformat(YESTERDAY),
         options=TransactionsGetRequestOptions(
             include_original_description=True,
-            include_personal_finance_category=True
+            include_personal_finance_category=True,
+            days_requested=730
         )
     )
     response = client.transactions_get(request)
     transactions = response['transactions']
+    print('total transactions: ' + str(response['total_transactions']))
 
     while len(transactions) < response['total_transactions']:
         request = TransactionsGetRequest(
@@ -165,6 +169,7 @@ def pull_campbell_plaid(last_date=None):
             options=TransactionsGetRequestOptions(
                 include_original_description=True,
                 include_personal_finance_category=True,
+                days_requested=730,
                 offset=len(transactions)
             )
         )
@@ -257,7 +262,7 @@ def combine_tables(conn):
                     , transaction_type 
                     from 
                     campbell_bank.public.plaid_raw
-                    where account_id in ('bNPrxrEOYdCOJn4akbZwhKak700gMDuDw64V7', 'Kb59M7gmmwiQOJKLV8waIDvJYw3v6aFEMvmO7','9MNJVaP4oyibOzyMx48XuzyYKa9wzofgBZ7rd', 'YdKONndeBVf18Jxjpe5ECO8evjJzwnCzKb9Zr') 
+                    where account_id in ('JEq30KkYk0sj1pJ0ozX6fXZj7EA5ADI0NAeNe','wykD76o9pEIoYVPJ0LZLFm4YnwZReDFv4y95m','bNPrxrEOYdCOJn4akbZwhKak700gMDuDw64V7','Kb59M7gmmwiQOJKLV8waIDvJYw3v6aFEMvmO7','9MNJVaP4oyibOzyMx48XuzyYKa9wzofgBZ7rd','YdKONndeBVf18Jxjpe5ECO8evjJzwnCzKb9Zr') 
                     )
                     , combined as 
                     (
