@@ -122,7 +122,7 @@ def pull_campbell_plaid(last_date=None):
     if last_date == None:
         start_date = date.fromisoformat('2017-01-01')
     else:
-        # start_date = date.fromisoformat('2024-01-28')
+        # start_date = date.fromisoformat('2024-10-01')
         start_date = last_date + timedelta(days=1)
 
     PLAID_REDIRECT_URI = empty_to_none('PLAID_REDIRECT_URI')
@@ -216,7 +216,17 @@ def combine_tables(conn):
         print(str(r))
         pass
 
-    create_sql = """
+    # TODO Use these to format the sql or create a better way
+    account_ids = ['veEkEMvDr9sM0z6mbEQzcNLX8v9bqAtPO61oBv'
+        ,'JEq30KkYk0sj1pJ0ozX6fXZj7EA5ADI0NAeNe'
+        ,'wykD76o9pEIoYVPJ0LZLFm4YnwZReDFv4y95m'
+        ,'bNPrxrEOYdCOJn4akbZwhKak700gMDuDw64V7'
+        ,'Kb59M7gmmwiQOJKLV8waIDvJYw3v6aFEMvmO7'
+        ,'9MNJVaP4oyibOzyMx48XuzyYKa9wzofgBZ7rd'
+        ,'YdKONndeBVf18Jxjpe5ECO8evjJzwnCzKb9Zr'
+        ,'M0Jy7OMRrPTAQE9mDRY5cpO6PZKX0DHk6aAwg']
+
+    create_sql = f"""
                     create table campbell_bank.public.checking_account_core as
                     (
                     with historical as 
@@ -262,7 +272,7 @@ def combine_tables(conn):
                     , transaction_type 
                     from 
                     campbell_bank.public.plaid_raw
-                    where account_id in ('JEq30KkYk0sj1pJ0ozX6fXZj7EA5ADI0NAeNe','wykD76o9pEIoYVPJ0LZLFm4YnwZReDFv4y95m','bNPrxrEOYdCOJn4akbZwhKak700gMDuDw64V7','Kb59M7gmmwiQOJKLV8waIDvJYw3v6aFEMvmO7','9MNJVaP4oyibOzyMx48XuzyYKa9wzofgBZ7rd','YdKONndeBVf18Jxjpe5ECO8evjJzwnCzKb9Zr') 
+                    where account_id in ('M0Jy7OMRrPTAQE9mDRY5cpO6PZKX0DHk6aAwg','veEkEMvDr9sM0z6mbEQzcNLX8v9bqAtPO61oBv','JEq30KkYk0sj1pJ0ozX6fXZj7EA5ADI0NAeNe','wykD76o9pEIoYVPJ0LZLFm4YnwZReDFv4y95m','bNPrxrEOYdCOJn4akbZwhKak700gMDuDw64V7','Kb59M7gmmwiQOJKLV8waIDvJYw3v6aFEMvmO7','9MNJVaP4oyibOzyMx48XuzyYKa9wzofgBZ7rd','YdKONndeBVf18Jxjpe5ECO8evjJzwnCzKb9Zr') 
                     )
                     , combined as 
                     (
